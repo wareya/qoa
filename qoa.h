@@ -406,6 +406,7 @@ unsigned int qoa_encode_frame(const short *sample_data, qoa_desc *qoa, unsigned 
 			16 scalefactors, encode all samples for the current slice and 
 			meassure the total squared error. */
 			qoa_uint64_t best_error = -1;
+			qoa_uint64_t prev_error = -1;
 			qoa_uint64_t best_slice;
 			qoa_lms_t best_lms;
 			int best_scalefactor;
@@ -423,6 +424,7 @@ unsigned int qoa_encode_frame(const short *sample_data, qoa_desc *qoa, unsigned 
 				qoa_uint64_t slice = scalefactor;
 				qoa_uint64_t current_error = 0;
 
+				int n = 0;
 				for (int si = slice_start; si < slice_end; si += channels) {
 					int sample = sample_data[si];
 					int predicted = qoa_lms_predict(&lms);
@@ -442,6 +444,7 @@ unsigned int qoa_encode_frame(const short *sample_data, qoa_desc *qoa, unsigned 
 
 					qoa_lms_update(&lms, reconstructed, dequantized);
 					slice = (slice << 3) | quantized;
+					n += 1;
 				}
 
 				if (current_error < best_error) {
@@ -450,6 +453,16 @@ unsigned int qoa_encode_frame(const short *sample_data, qoa_desc *qoa, unsigned 
 					best_lms = lms;
 					best_scalefactor = scalefactor;
 				}
+				else if (n < (slice_len >> 2))
+				{
+					if (scalefactor > prev_scalefactor[c]) {
+						sfi = 16 - prev_scalefactor[c] - 1;
+					}
+					else if (scalefactor != 0 && current_error >> 2 > prev_error) {
+						break;
+					}
+				}
+				prev_error = current_error;
 			}
 
 			prev_scalefactor[c] = best_scalefactor;
